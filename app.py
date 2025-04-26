@@ -267,14 +267,15 @@ def update_win_rate_graph(selected_country):
                            r='Percentage',     # Radius axis
                            color='Result',
                            title=f'Win/Loss/Draw % for {selected_country} by Tournament (Hover for Count)', # Updated title
-                           hover_data=['Count'], # Add Count to hover data
+                           # hover_data=['Count'], # Remove hover_data
+                           custom_data=['Result', 'Count'], # Explicitly define custom_data
                            labels={'Percentage': '% of Matches', 'Count': 'Matches'}, # Add label for Count
                            category_orders={"Result": ["Win", "Draw", "Loss"]},
                            color_discrete_map={'Win': 'green', 'Loss': 'red', 'Draw': 'blue'},
                            template='plotly_dark',
                            range_r=[0, 105]
                            )
-        # Customize hover template slightly for clarity
+        # Customize hover template slightly for clarity (should now work correctly)
         fig.update_traces(hovertemplate=
             '<b>%{theta}</b><br>' +
             'Result: %{customdata[0]}<br>' + # Result is the first custom data item
