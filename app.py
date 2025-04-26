@@ -678,4 +678,6 @@ def update_h2h_graph(team1, team2):
 
 # --- 5. Run the App ---
 if __name__ == '__main__':
-    app.run(debug=True) # Changed from app.run_server to app.run 
+    import os
+    port = int(os.environ.get("PORT", 8050))
+    app.run(host="0.0.0.0", port=port)
