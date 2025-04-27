@@ -271,7 +271,7 @@ def update_win_rate_graph(selected_country):
                            custom_data=['Result', 'Count'], # Explicitly define custom_data
                            labels={'Percentage': '% of Matches', 'Count': 'Matches'}, # Add label for Count
                            category_orders={"Result": ["Win", "Draw", "Loss"]},
-                           color_discrete_map={'Win': 'green', 'Loss': 'red', 'Draw': 'blue'},
+                           color_discrete_map={'Win': '#1f77b4', 'Loss': '#ff7f0e', 'Draw': '#7f7f7f'}, # Colorblind Friendly: Blue/Orange/Grey
                            template='plotly_dark',
                            range_r=[0, 105]
                            )
@@ -305,74 +305,117 @@ def update_win_rate_graph(selected_country):
         }
     return fig
 
-# Callback for Visualization 2: Goal Scoring Trends
+# Callback for Visualization 2: Goal Scoring Trends (Now interactive)
 @app.callback(
     Output('goal-trends-graph', 'figure'),
-    Input('tournament-dropdown-v2', 'value')
+    [Input('tournament-dropdown-v2', 'value'),
+     Input('win-rate-tournament-graph', 'clickData'),
+     Input('country-dropdown-v3', 'value')]
 )
-def update_goal_trends_graph(selected_tournament):
+def update_goal_trends_graph(selected_tournament_dropdown, win_rate_clickData, selected_country_v3):
+
+    trigger_id = dash.ctx.triggered_id
+    filter_tournament = selected_tournament_dropdown # Default tournament filter
+
+    # --- Determine Tournament Filter Based on Trigger --- #
+    # If the radial chart click triggered it, try to use that tournament
+    if trigger_id == 'win-rate-tournament-graph' and win_rate_clickData:
+        try:
+            clicked_tournament = win_rate_clickData['points'][0]['theta']
+            filter_tournament = clicked_tournament
+            print(f"Filtering Goal Trends by clicked tournament: {clicked_tournament}")
+        except (KeyError, IndexError, TypeError):
+            print("Could not extract tournament from win_rate_clickData")
+            filter_tournament = selected_tournament_dropdown # Fallback to dropdown
+    # If triggered by dropdown, use its value (filter_tournament is already set)
+    elif trigger_id == 'tournament-dropdown-v2':
+         print(f"Filtering Goal Trends by dropdown: {filter_tournament}")
+    # If triggered by country dropdown, use the existing tournament filter
+    elif trigger_id == 'country-dropdown-v3':
+         print(f"Filtering Goal Trends by Country change: {selected_country_v3} with Tournament: {filter_tournament}")
+
+
+    # --- Data Filtering --- #
     filtered_df = df.copy()
-    plot_title = 'Average Goals Scored per Match (Home vs. Away)'
-    if selected_tournament != 'All':
-        filtered_df = df[df['Tournament'] == selected_tournament]
-        # plot_title += f' in {selected_tournament}' # Title already in H4
+    # Apply Country Filter first (from Home/Away Dropdown V3)
+    country_filter_text = "Overall"
+    if selected_country_v3 and selected_country_v3 != 'Overall':
+        filtered_df = filtered_df[(filtered_df['Home Team'] == selected_country_v3) | (filtered_df['Away Team'] == selected_country_v3)]
+        country_filter_text = selected_country_v3
+
+    # Apply Tournament Filter (from own dropdown or radial click)
+    tournament_filter_text = "All Tournaments"
+    if filter_tournament and filter_tournament != 'All':
+        # Apply on top of country filter
+        filtered_df = filtered_df[filtered_df['Tournament'] == filter_tournament]
+        tournament_filter_text = filter_tournament
+
+    # --- Title --- #
+    plot_title = f'Avg Goals Scored (Home vs. Away) - {country_filter_text} - {tournament_filter_text}'
 
     # Calculate average goals per year
     avg_goals_yearly = filtered_df.groupby(filtered_df['Date'].dt.year)[['Home Goals', 'Away Goals']].mean().reset_index()
 
+    # --- Handle No Data --- #
+    # Update error message context
     if avg_goals_yearly.empty:
-         return {
+        error_text = f"No relevant goal data found for {country_filter_text} in {tournament_filter_text}"
+        return {
             'layout': {
                 'xaxis': {'visible': False},
                 'yaxis': {'visible': False},
                 'annotations': [{
-                    'text': f'No data for {selected_tournament}.',
+                    'text': error_text,
                     'xref': 'paper',
                     'yref': 'paper',
                     'showarrow': False,
                     'font': {'size': 16}
-                }]
+                }],
+                'template': 'plotly_dark'
             }
         }
 
-    # Use go.Figure and go.Scatter for overlayed, smoothed area chart
+    # --- Create Area Chart --- #
     fig = go.Figure()
 
-    # Add Home Goals trace
-    fig.add_trace(go.Scatter(
-        x=avg_goals_yearly['Date'],
-        y=avg_goals_yearly['Home Goals'],
-        mode='lines', # We fill, so markers aren't needed on the line itself
-        line=dict(shape='spline', width=1), # Smooth line, thin width
-        fill='tozeroy', # Fill area down to y=0
-        name='Home Goals',
-        opacity=0.7 # Add some opacity for overlay
-    ))
+    # Add Home Goals trace (Only if data exists for the filtered selection)
+    if 'Home Goals' in avg_goals_yearly.columns and not avg_goals_yearly['Home Goals'].isnull().all():
+        fig.add_trace(go.Scatter(
+            x=avg_goals_yearly['Date'],
+            y=avg_goals_yearly['Home Goals'],
+            mode='lines',
+            line=dict(shape='spline', width=1),
+            fill='tozeroy',
+            name='Home Goals',
+            marker_color='#9467bd',
+            opacity=0.7
+        ))
 
-    # Add Away Goals trace
-    fig.add_trace(go.Scatter(
-        x=avg_goals_yearly['Date'],
-        y=avg_goals_yearly['Away Goals'],
-        mode='lines',
-        line=dict(shape='spline', width=1),
-        fill='tozeroy',
-        name='Away Goals',
-        opacity=0.7 # Add some opacity for overlay
-    ))
+    # Add Away Goals trace (Only if data exists for the filtered selection)
+    if 'Away Goals' in avg_goals_yearly.columns and not avg_goals_yearly['Away Goals'].isnull().all():
+        fig.add_trace(go.Scatter(
+            x=avg_goals_yearly['Date'],
+            y=avg_goals_yearly['Away Goals'],
+            mode='lines',
+            line=dict(shape='spline', width=1),
+            fill='tozeroy',
+            name='Away Goals',
+            marker_color='#2ca02c',
+            opacity=0.7
+        ))
 
     # Update layout
     fig.update_layout(
-        title='Average Goals Scored per Match (Home vs. Away)', # Add title back
+        title=plot_title,
         xaxis_title='Year',
         yaxis_title='Avg Goals per Match',
-        legend_title_text='Team Location',
-        margin=dict(l=20, r=20, t=50, b=20), # Adjust top margin for title
+        legend_title_text='Team Location', # Keep legend title
+        margin=dict(l=20, r=20, t=50, b=20),
         height=400,
         template='plotly_dark',
-        hovermode='x unified' # Show unified hover info for both traces
+        hovermode='x unified'
     )
 
-    # fig.update_traces(line_shape='spline') # Smoothing is now done within go.Scatter
     return fig
 
 # Callback for Visualization 3: Home vs Away Performance (Reverted)
@@ -457,15 +500,18 @@ def update_home_away_graph(selected_option):
 
     # --- Create Grouped Bar Chart --- (Reverted from Box Plot)
     try:
-        fig = px.bar(plot_data, x='Result', y='Percentage', color='Location',
+        # Switched axes: x=Location, color=Result
+        fig = px.bar(plot_data, x='Location', y='Percentage', color='Result',
                      barmode='group',
                      title=f"Home vs Away Win/Draw/Loss % {title_suffix}",
-                     labels={'Percentage': '% of Matches'},
-                     category_orders={"Result": ["Win", "Draw", "Loss"], "Location": ["Home", "Away"]},
+                     labels={'Percentage': '% of Matches', 'Location': 'Match Location'},
+                     category_orders={"Location": ["Home", "Away"], "Result": ["Win", "Draw", "Loss"]},
+                     color_discrete_map={'Win': '#1f77b4', 'Loss': '#ff7f0e', 'Draw': '#7f7f7f'}, # Colorblind Friendly: Blue/Orange/Grey
                      template='plotly_dark')
         fig.update_layout(margin=dict(l=20, r=20, t=50, b=20), height=400,
                           yaxis_title="% of Matches",
-                          xaxis_title="Match Result", # Added X axis title
+                          xaxis_title="Match Location", # Updated X axis title
+                          legend_title_text='Result', # Added legend title
                           title_font_size=14)
     except Exception as e:
          print(f"Error creating home vs away bar plot: {e}")
@@ -515,11 +561,11 @@ def update_h2h_graph(team1, team2):
         return no_data_fig, None, None # Return empty figure and None for KPIs/Table
 
     # Filter matches between the two selected teams
-    h2h_df = df[((df['Home Team'] == team1) & (df['Away Team'] == team2)) |
+    h2h_df_full = df[((df['Home Team'] == team1) & (df['Away Team'] == team2)) |
                 ((df['Home Team'] == team2) & (df['Away Team'] == team1))].copy()
 
-    # --- Handle No Data ---
-    if h2h_df.empty:
+    # --- Handle No Data --- (Use h2h_df_full)
+    if h2h_df_full.empty:
         # Fully formed error dictionary
         no_data_fig = {
             'layout': {
@@ -538,64 +584,69 @@ def update_h2h_graph(team1, team2):
         return no_data_fig, "No match history.", None
 
     # --- Calculate Overall H2H Wins/Draws (Used for Sankey values AND labels) ---
-    team1_wins = h2h_df[h2h_df['Winner'] == team1].shape[0]
-    team2_wins = h2h_df[h2h_df['Winner'] == team2].shape[0]
-    draws = h2h_df[h2h_df['Winner'] == 'Draw'].shape[0]
+    team1_wins = h2h_df_full[h2h_df_full['Winner'] == team1].shape[0]
+    team2_wins = h2h_df_full[h2h_df_full['Winner'] == team2].shape[0]
+    draws = h2h_df_full[h2h_df_full['Winner'] == 'Draw'].shape[0]
 
-    # --- Create Sankey Diagram --- (Updated Labels & Node Hoverinfo)
+    # --- Create Sankey Diagram --- (No changes needed here for this interaction)
     try:
         # Define nodes and colors - Include counts in outcome labels
         label = [
             team1,
             team2,
-            f'{team1} Wins ({team1_wins})', # Add count to label
-            f'{team2} Wins ({team2_wins})', # Add count to label
-            f'Draw ({draws})'             # Add count to label
+            f'{team1} Wins ({team1_wins})',
+            f'{team2} Wins ({team2_wins})',
+            f'Draw ({draws})'
         ]
-        colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#8c564b'] # Keep colors
+        # Colorblind Friendly: Node Colors (Purple/Green for teams, Blue/Grey for outcomes)
+        colors = [
+            '#9467bd', # Team 1 (Purple)
+            '#2ca02c', # Team 2 (Green)
+            '#1f77b4', # Win Outcome (Blue)
+            '#1f77b4', # Win Outcome (Blue)
+            '#7f7f7f'  # Draw Outcome (Grey)
+        ]
 
         source = []
         target = []
         value = []
-        link_colors = [] # Initialize list for link colors
+        link_colors = []
 
-        # Define RGBA colors for links with transparency
-        alpha = 0.6 # Set desired transparency (0.0 to 1.0)
-        link_color_t1 = f'rgba(31, 119, 180, {alpha})'  # RGBA for #1f77b4
-        link_color_t2 = f'rgba(255, 127, 14, {alpha})' # RGBA for #ff7f0e
+        # Define RGBA colors for links with transparency based on new node colors
+        alpha = 0.6
+        link_color_t1 = f'rgba(148, 103, 189, {alpha})'
+        link_color_t2 = f'rgba(44, 160, 44, {alpha})'
 
-        # Calculate flows
-        # Flow: Team 1 (Home) -> Outcome
-        t1_home_df = h2h_df[h2h_df['Home Team'] == team1]
-        t1_home_wins = t1_home_df[t1_home_df['Winner'] == team1].shape[0]
-        t1_home_losses = t1_home_df[t1_home_df['Winner'] == team2].shape[0]
-        t1_home_draws = t1_home_df[t1_home_df['Winner'] == 'Draw'].shape[0]
+        # Calculate flows (Use h2h_df_full)
+        t1_home_df = h2h_df_full[h2h_df_full['Home Team'] == team1]
+        t1_home_wins_count = t1_home_df[t1_home_df['Winner'] == team1].shape[0]
+        t1_home_losses_count = t1_home_df[t1_home_df['Winner'] == team2].shape[0]
+        t1_home_draws_count = t1_home_df[t1_home_df['Winner'] == 'Draw'].shape[0]
 
-        if t1_home_wins > 0:
-            source.append(0); target.append(2); value.append(t1_home_wins)
-            link_colors.append(link_color_t1) # Use Team 1 transparent color
-        if t1_home_losses > 0:
-            source.append(0); target.append(3); value.append(t1_home_losses)
-            link_colors.append(link_color_t1) # Use Team 1 transparent color
-        if t1_home_draws > 0:
-            source.append(0); target.append(4); value.append(t1_home_draws)
-            link_colors.append(link_color_t1) # Use Team 1 transparent color
+        if t1_home_wins_count > 0:
+            source.append(0); target.append(2); value.append(t1_home_wins_count)
+            link_colors.append(link_color_t1)
+        if t1_home_losses_count > 0:
+            source.append(0); target.append(3); value.append(t1_home_losses_count)
+            link_colors.append(link_color_t1)
+        if t1_home_draws_count > 0:
+            source.append(0); target.append(4); value.append(t1_home_draws_count)
+            link_colors.append(link_color_t1)
 
-        # Flow: Team 2 (Home) -> Outcome
-        t2_home_df = h2h_df[h2h_df['Home Team'] == team2]
-        t2_home_wins = t2_home_df[t2_home_df['Winner'] == team2].shape[0]
-        t2_home_losses = t2_home_df[t2_home_df['Winner'] == team1].shape[0]
-        t2_home_draws = t2_home_df[t2_home_df['Winner'] == 'Draw'].shape[0]
+        t2_home_df = h2h_df_full[h2h_df_full['Home Team'] == team2]
+        t2_home_wins_count = t2_home_df[t2_home_df['Winner'] == team2].shape[0]
+        t2_home_losses_count = t2_home_df[t2_home_df['Winner'] == team1].shape[0]
+        t2_home_draws_count = t2_home_df[t2_home_df['Winner'] == 'Draw'].shape[0]
 
-        if t2_home_wins > 0:
-            source.append(1); target.append(3); value.append(t2_home_wins)
-            link_colors.append(link_color_t2) # Use Team 2 transparent color
-        if t2_home_losses > 0:
-            source.append(1); target.append(2); value.append(t2_home_losses)
-            link_colors.append(link_color_t2) # Use Team 2 transparent color
-        if t2_home_draws > 0:
-            source.append(1); target.append(4); value.append(t2_home_draws)
-            link_colors.append(link_color_t2) # Use Team 2 transparent color
+        if t2_home_wins_count > 0:
+            source.append(1); target.append(3); value.append(t2_home_wins_count)
+            link_colors.append(link_color_t2)
+        if t2_home_losses_count > 0:
+            source.append(1); target.append(2); value.append(t2_home_losses_count)
+            link_colors.append(link_color_t2)
+        if t2_home_draws_count > 0:
+            source.append(1); target.append(4); value.append(t2_home_draws_count)
+            link_colors.append(link_color_t2)
 
         # Create the Sankey figure
         fig = go.Figure(data=[go.Sankey(
@@ -614,7 +665,7 @@ def update_h2h_graph(team1, team2):
               value=value,
               color=link_colors, # Assign transparent RGBA colors to links
               hoverinfo='all',
-              hovertemplate='Matches from %{source.label} resulting in %{target.label}: %{value}x<extra></extra>'
+              hovertemplate='Matches in %{source.label} resulting in %{target.label}: %{value}x<extra></extra>'
           ))])
 
         fig.update_layout(title_text=f"H2H Outcomes Flow: {team1} vs {team2}",
@@ -642,12 +693,12 @@ def update_h2h_graph(team1, team2):
          }
          return no_data_fig, "Error generating plot.", None
 
-    # --- Calculate KPIs ---
-    total_goals = h2h_df['Home Goals'].sum() + h2h_df['Away Goals'].sum()
-    total_matches = len(h2h_df)
+    # --- Calculate KPIs (Use h2h_df_full) ---
+    total_goals = h2h_df_full['Home Goals'].sum() + h2h_df_full['Away Goals'].sum()
+    total_matches = len(h2h_df_full)
     avg_goals_per_match = (total_goals / total_matches) if total_matches > 0 else 0
-    h2h_df['Total Goals'] = h2h_df['Home Goals'] + h2h_df['Away Goals']
-    over_2_5 = h2h_df[h2h_df['Total Goals'] > 2.5].shape[0]
+    h2h_df_full['Total Goals'] = h2h_df_full['Home Goals'] + h2h_df_full['Away Goals']
+    over_2_5 = h2h_df_full[h2h_df_full['Total Goals'] > 2.5].shape[0]
     perc_over_2_5 = (over_2_5 / total_matches * 100) if total_matches > 0 else 0
 
     kpi_div = html.Div([
@@ -656,26 +707,53 @@ def update_h2h_graph(team1, team2):
         f"Over 2.5 Goals: {perc_over_2_5:.1f}%"
     ])
 
-    # --- Create Recent Matches Table ---
-    recent_matches_df = h2h_df.sort_values('Date', ascending=False).head(5) # Get last 5
-    # Select and rename columns for display
-    recent_matches_df_display = recent_matches_df[['Date', 'Home Team', 'Home Goals', 'Away Goals', 'Away Team', 'Tournament']].copy()
-    recent_matches_df_display['Date'] = recent_matches_df_display['Date'].dt.strftime('%Y-%m-%d') # Format date
+    # --- Create Recent Matches Table (Reverted to always show last 5) ---
+    table_title = "Last 5 Meetings:"
+    h2h_df_filtered = h2h_df_full # Always use full H2H data for the table base
 
-    table_div = html.Div([
-        html.Strong("Last 5 Meetings:"),
-        dash_table.DataTable(
-            data=recent_matches_df_display.to_dict('records'),
-            columns=[{'name': i, 'id': i} for i in recent_matches_df_display.columns],
-            style_cell={'textAlign': 'left', 'backgroundColor': '#333', 'color': 'white', 'border': '1px solid #555'},
-            style_header={'backgroundColor': '#555', 'fontWeight': 'bold'},
-            style_table={'overflowX': 'auto'}, # Handle potentially wide table
-            page_size=5, # Show only 5 rows
-        )
-    ])
+    # Sort and select top 5 for display
+    recent_matches_df = h2h_df_filtered.sort_values('Date', ascending=False).head(5)
 
-    # --- Return all components ---
+    # Generate table or 'no matches' message
+    if not recent_matches_df.empty:
+        # Select and rename columns for display
+        display_columns = ['Date', 'Home Team', 'Home Goals', 'Away Goals', 'Away Team', 'Tournament']
+        recent_matches_df_display = recent_matches_df[display_columns].copy()
+        recent_matches_df_display['Date'] = recent_matches_df_display['Date'].dt.strftime('%Y-%m-%d') # Format date
+
+        table_div = html.Div([
+            html.Strong(table_title),
+            dash_table.DataTable(
+                id='h2h-results-table',
+                data=recent_matches_df_display.to_dict('records'),
+                columns=[{'name': i, 'id': i} for i in recent_matches_df_display.columns],
+                style_cell={'textAlign': 'left', 'backgroundColor': '#333', 'color': 'white', 'border': '1px solid #555', 'padding': '5px'},
+                style_header={'backgroundColor': '#555', 'fontWeight': 'bold'},
+                style_table={'overflowX': 'auto'},
+                page_size=5, # Show only 5 rows if not filtered, otherwise allows more if needed
+            )
+        ])
+    else:
+        # This case should ideally not happen if h2h_df_full wasn't empty initially
+        table_div = html.Div("No H2H matches found to display in table.")
+
     return fig, kpi_div, table_div
+
+# --- Callback to update Team 2 options based on Team 1 --- #
+@app.callback(
+    Output('team2-dropdown-v4', 'options'),
+    Input('team1-dropdown-v4', 'value')
+)
+def set_team2_options(selected_team1):
+    return [{'label': team, 'value': team} for team in all_teams if team != selected_team1]
+
+# --- Callback to update Team 1 options based on Team 2 --- #
+@app.callback(
+    Output('team1-dropdown-v4', 'options'),
+    Input('team2-dropdown-v4', 'value')
+)
+def set_team1_options(selected_team2):
+    return [{'label': team, 'value': team} for team in all_teams if team != selected_team2]
 
 # --- 5. Run the App ---
 if __name__ == '__main__':
