@@ -755,6 +755,29 @@ def set_team2_options(selected_team1):
 def set_team1_options(selected_team2):
     return [{'label': team, 'value': team} for team in all_teams if team != selected_team2]
 
+# --- Callbacks to sync Country Dropdowns V1 and V3 --- #
+@app.callback(
+    Output('country-dropdown-v3', 'value'),
+    Input('country-dropdown-v1', 'value'),
+    prevent_initial_call=True # Avoid triggering on initial load if default values match
+)
+def sync_v3_from_v1(selected_country):
+    return selected_country
+
+@app.callback(
+    Output('country-dropdown-v1', 'value'),
+    Input('country-dropdown-v3', 'value'),
+    prevent_initial_call=True # Avoid triggering on initial load if default values match
+)
+def sync_v1_from_v3(selected_country):
+    # Allow 'Overall' selection in V3 without changing V1 from a specific country
+    # Only sync if V3 selects a specific country
+    if selected_country != 'Overall':
+        return selected_country
+    # If V3 is 'Overall', we don't want to force V1 to change
+    # Prevent the update to avoid clearing V1 selection
+    return dash.no_update
+
 # --- 5. Run the App ---
 if __name__ == '__main__':
     import os
