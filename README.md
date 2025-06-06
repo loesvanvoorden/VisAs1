@@ -95,6 +95,29 @@ To run this dashboard on your local machine, please follow these steps.
     ```
     Open this URL (`http://127.0.0.1:8050/`) in your web browser to view and interact with the dashboard.
 
+## Local Development
+When running locally, it's best to use Dash's built-in development server with debug mode enabled for features like hot-reloading.
+
+To do this, set the `DEBUG` environment variable to `true` before running the script.
+
+**For macOS/Linux:**
+```sh
+DEBUG=true python app.py
+```
+
+**For Windows (Command Prompt):**
+```sh
+set DEBUG=true
+python app.py
+```
+
+## Deployment to Railway
+This application is configured for deployment on platforms like Railway.
+
+1.  **`Procfile`:** The included `Procfile` tells Railway to use `gunicorn` (a production-grade WSGI server) to run the application.
+2.  **Server Configuration:** The `app.py` script is set up to bind to the host and port provided by Railway's environment variables.
+3.  **Deployment:** To deploy, simply connect your GitHub repository to a new project on Railway. Railway will automatically detect the `Procfile` and `requirements.txt` and deploy the application.
+
 ## Code and Source Attribution
 The code in `app.py` was developed as part of this university project. The visual and functional components are built upon the open-source libraries listed in the `requirements.txt` file, which are fundamental to the fields of data analysis and web application development in Python.
 

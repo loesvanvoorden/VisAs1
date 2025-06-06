@@ -16,6 +16,7 @@ app = dash.Dash(__name__,
     meta_tags=[{'name': 'viewport', 'content': 'width=device-width, initial-scale=1.0'}] # Corrected meta_tags
 )
 app.title = "Football Match Insights"
+server = app.server
 
 # --- 1. Data Loading and Preprocessing ---
 try:
@@ -1329,7 +1330,14 @@ def sync_h2h_team1_from_v3(selected_country_v3):
 if __name__ == '__main__':
     # Make sure the 'assets' folder exists for app.get_asset_url to work
     import os
+    # Railway provides the PORT env var. Default to 8050 for local dev.
+    port = int(os.environ.get('PORT', 8050))
+    # Enable debug mode for local development. On Railway, this will be False.
+    debug = os.environ.get('DEBUG', 'False').lower() == 'true'
+    # Use 0.0.0.0 for deployed environments (like Railway), 127.0.0.1 for local
+    host = '0.0.0.0' if 'PORT' in os.environ else '127.0.0.1'
+
     if not os.path.exists('assets'):
         os.makedirs('assets')
-    app.run(debug=True) # Changed from app.run_server
+    app.run(debug=debug, host=host, port=port)
  
