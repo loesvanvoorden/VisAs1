@@ -118,6 +118,9 @@ This application is configured for deployment on platforms like Railway.
 2.  **Server Configuration:** The `app.py` script is set up to bind to the host and port provided by Railway's environment variables.
 3.  **Deployment:** To deploy, simply connect your GitHub repository to a new project on Railway. Railway will automatically detect the `Procfile` and `requirements.txt` and deploy the application.
 
+A live version of this dashboard is also accessible here: [https://web-production-b8722.up.railway.app/](https://web-production-b8722.up.railway.app/). 
+Please note that the initial load and interactions on the deployed version may be slower than running the application locally.
+
 ## Code and Source Attribution
 The code in `app.py` was developed as part of this university project. The visual and functional components are built upon the open-source libraries listed in the `requirements.txt` file, which are fundamental to the fields of data analysis and web application development in Python.
 
